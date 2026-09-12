@@ -66,63 +66,6 @@ breakdown: [docs/installation.md](docs/installation.md).
 If `reconcave` isn't found as a command after install (PATH issue), use
 `python -m reconcave` instead — identical behavior either way.
 
-### Troubleshooting: `reconcave: command not found`
-
-If `pip install` printed a warning like `The script reconcave is
-installed in '.../.local/bin' which is not on PATH`, that means the
-install worked correctly — your shell just doesn't know to look there
-yet. Confirm the binary exists and runs:
-
-```bash
-~/.local/bin/reconcave --version
-```
-
-If that prints a version number, fix it permanently by adding that
-directory to your `PATH` (check `echo $SHELL` first to know which file
-to edit):
-
-```bash
-# zsh (Kali's default shell):
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-
-# bash:
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
-```
-
-If it's still not found after that, open a brand new terminal window —
-some terminals don't fully reload the shell profile from `source` alone.
-
-On Debian/Kali, `python3 -m venv` sometimes fails with `ensurepip is not
-available` and a suggested `apt install python3.X-venv` package that
-doesn't actually exist in the repos. If you hit that, skip the venv
-entirely — a plain `pip install -e ".[full]"` still works correctly (it
-falls back to a user-level install), just apply the PATH fix above
-afterward.
-
-### Updating
-
-Since the install is editable (`-e`), pulling new code updates the tool
-immediately for any pure Python change — no reinstall needed:
-
-```bash
-cd reconcave
-git pull
-```
-
-Re-run the install step only when a *new dependency* has been added
-(check `CHANGELOG.md` or `pyproject.toml` if unsure — re-running is
-always safe either way, it just re-resolves dependencies):
-
-```bash
-pip install -e ".[full]"
-```
-
-Confirm you're on the latest version:
-
-```bash
-reconcave --version
-```
-
 ## Getting started
 
 ReconCave has two interfaces to the same code. Use whichever fits.
