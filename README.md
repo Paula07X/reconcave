@@ -40,88 +40,78 @@ HTML report.
 
 ## Install
 
-Requires Python 3.9+. Same command on every OS.
+Requires Python 3.9+.
 
-### Windows
+### Windows (PowerShell)
 
 ```powershell
 git clone https://github.com/paula07x/reconcave.git
 cd reconcave
 pip install -e ".[full]"
+reconcave --version
 ```
+
+If the last line prints `reconcave: command not found` or similar,
+Python's user script folder isn't on your `PATH`. Add it for the current
+session and verify:
+
+```powershell
+$scriptsPath = (python -m site --user-site) -replace 'site-packages$', 'Scripts'
+$env:Path += ";$scriptsPath"
+reconcave --version
+```
+
+To make that permanent, add the same path via *System Properties →
+Environment Variables → Path* (Windows' PATH-persistence step isn't
+scriptable the same way Linux/macOS `.rc` files are).
 
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/paula07x/reconcave.git
-cd reconcave
-pip install -e ".[full]"
+git clone https://github.com/paula07x/reconcave.git && cd reconcave && pip install -e ".[full]" && case "$SHELL" in */zsh) RCFILE="$HOME/.zshrc" ;; */bash) RCFILE="$HOME/.bashrc" ;; *) RCFILE="$HOME/.profile" ;; esac && grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$RCFILE" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$RCFILE" && export PATH="$HOME/.local/bin:$PATH" && reconcave --version
 ```
+
+That single block clones the repo, installs it, detects whether you're
+on `bash` or `zsh`, adds `~/.local/bin` to `PATH` permanently in the
+right config file (only if it isn't already there — safe to run more
+than once), applies it to your current session immediately, and prints
+the version to confirm it worked. If `reconcave --version` at the end
+doesn't print a version number, close the terminal completely and open
+a new one — some terminals don't fully reload after a `.rc` file change.
 
 `[full]` adds optional libraries (`dnspython`, `tldextract`, `pyfiglet`,
 `colorama`) that unlock a few extra checks and a nicer banner — the core
 tool works without them too, just with fewer enrichment features. Full
 breakdown: [docs/installation.md](docs/installation.md).
 
-If `reconcave` isn't found as a command after install (PATH issue), use
-`python -m reconcave` instead — identical behavior either way.
+On Debian/Kali specifically, `python3 -m venv` sometimes fails with
+`ensurepip is not available` and points at a `python3.X-venv` package
+that doesn't actually exist in the repos — if that happens, skip the
+venv entirely and use the block above as-is; it works correctly without
+one (falls back to a user-level install).
 
-### Troubleshooting: `reconcave: command not found`
+### Running it without installing anything
 
-If `pip install` printed a warning like `The script reconcave is
-installed in '.../.local/bin' which is not on PATH`, that means the
-install worked correctly — your shell just doesn't know to look there
-yet. Confirm the binary exists and runs:
-
-```bash
-~/.local/bin/reconcave --version
-```
-
-If that prints a version number, fix it permanently by adding that
-directory to your `PATH` (check `echo $SHELL` first to know which file
-to edit):
+No install step is required at all if you'd rather not — from inside
+the cloned folder:
 
 ```bash
-# zsh (Kali's default shell):
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-
-# bash:
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+python3 reconcave/cli.py example.com
 ```
 
-If it's still not found after that, open a brand new terminal window —
-some terminals don't fully reload the shell profile from `source` alone.
-
-On Debian/Kali, `python3 -m venv` sometimes fails with `ensurepip is not
-available` and a suggested `apt install python3.X-venv` package that
-doesn't actually exist in the repos. If you hit that, skip the venv
-entirely — a plain `pip install -e ".[full]"` still works correctly (it
-falls back to a user-level install), just apply the PATH fix above
-afterward.
+This runs the exact same code as the installed `reconcave` command.
+Useful for a quick one-off check, or if you're just browsing the code.
 
 ### Updating
 
-Since the install is editable (`-e`), pulling new code updates the tool
-immediately for any pure Python change — no reinstall needed:
-
 ```bash
-cd reconcave
-git pull
+cd reconcave && git pull && pip install -e ".[full]" && reconcave --version
 ```
 
-Re-run the install step only when a *new dependency* has been added
-(check `CHANGELOG.md` or `pyproject.toml` if unsure — re-running is
-always safe either way, it just re-resolves dependencies):
-
-```bash
-pip install -e ".[full]"
-```
-
-Confirm you're on the latest version:
-
-```bash
-reconcave --version
-```
+Re-running the install step is always safe even when no dependency
+changed — it's only strictly necessary when one has (check
+[CHANGELOG.md](CHANGELOG.md) if curious), but there's no harm in always
+including it.
 
 ## Getting started
 
