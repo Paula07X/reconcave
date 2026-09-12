@@ -153,7 +153,25 @@ def print_banner():
 
     try:
         import pyfiglet
-        art_lines = pyfiglet.figlet_format(APP_NAME, font="big").rstrip("\n").split("\n")
+    except ImportError:
+        pyfiglet = None
+
+    art_lines = None
+    if pyfiglet is not None:
+        try:
+            art_lines = pyfiglet.figlet_format(APP_NAME, font="big").rstrip("\n").split("\n")
+        except Exception as e:
+            # pyfiglet is a third-party dependency whose exact font
+            # behavior isn't something this project controls or has
+            # exhaustively verified across every install — if anything
+            # about it goes wrong (missing font data, internal error,
+            # whatever), fall back to the plain box banner below rather
+            # than letting a banner-rendering problem take down the
+            # whole menu. Only visible with --verbose.
+            log.debug("pyfiglet banner failed (%s); using fallback banner.", e)
+            art_lines = None
+
+    if art_lines:
         # figlet lines share a common width; pad every line with the same
         # left margin rather than centering each independently, which
         # would stagger the letters instead of keeping the block aligned.
@@ -161,7 +179,7 @@ def print_banner():
         pad = left_margin(art_width)
         for line in art_lines:
             print(c(pad + line, "cyan", "bold"))
-    except ImportError:
+    else:
         title = f"  {_letter_spaced(APP_NAME)}  "
         box_width = max(len(title), 44)
         border = "=" * box_width

@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Paula Emad" }]
 keywords = ["security", "recon", "subdomain", "dns", "osint", "bug-bounty", "pentest"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
@@ -24,6 +24,12 @@ dependencies = [
     "beautifulsoup4>=4.11",
     "urllib3>=1.26",
 ]
+
+[project.urls]
+Homepage = "https://github.com/paula07x/reconcave"
+Repository = "https://github.com/paula07x/reconcave"
+Issues = "https://github.com/paula07x/reconcave/issues"
+Changelog = "https://github.com/paula07x/reconcave/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 full = ["tldextract>=3.4", "dnspython>=2.3", "rich>=13.0", "pyfiglet>=1.0", "colorama>=0.4"]
