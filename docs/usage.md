@@ -95,7 +95,8 @@ You'll see a banner and a menu with named scan types:
 6. **Everything** — full crawl + recon + all enrichments
 7. **Custom** — enter your own flags (type `help` here to see them all)
 8. **Help** — full flag reference, without leaving the menu
-9. **Exit**
+9. **Check for updates** — checks the GitHub repo for new commits and, with your confirmation, pulls and reinstalls
+10. **Exit**
 
 Every option prompts for your target and preferred output format
 (JSON or HTML) before running. **Ctrl+C stops the current scan at any

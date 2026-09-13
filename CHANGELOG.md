@@ -10,6 +10,9 @@ Project renamed twice during development before settling here (first
 each step — see the naming rationale in `README.md` if curious.
 
 ### Added
+- Menu option to check for and install updates directly from the
+  interactive menu (`git fetch`/`pull` + reinstall, only after explicit
+  confirmation — never automatic, and never touches the flag-driven CLI).
 - `--verbose`/`-v` and `--quiet`/`-q` flags for logging level control.
 - `--log-file PATH` — writes a full-detail log to a file independently of
   console verbosity, so `--quiet --log-file scan.log` gives a clean
@@ -19,6 +22,15 @@ each step — see the naming rationale in `README.md` if curious.
   still overrides for that run. `--no-config` skips it entirely.
 
 ### Fixed
+- **HTML report was silently missing data.** `--email` and `--dns-records`
+  results were correctly computed and saved to the JSON output, but the
+  HTML report template had no section for either — running
+  `--email --format html` produced a report that looked like the check
+  never happened, even though the data existed. Added dedicated sections
+  for email security, DNS records, and external links found, each only
+  rendered when that data is actually present, plus a full regression
+  test suite covering every combination (present/absent/unavailable) so
+  this class of bug can't silently recur.
 - **Banner rendering (`????` on Windows).** An earlier banner used Unicode
   fullwidth characters to make the app name render bigger. This broke on
   Windows consoles running a legacy codepage that doesn't cover that

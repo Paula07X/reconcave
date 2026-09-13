@@ -34,6 +34,12 @@ _TEMPLATE = """<!DOCTYPE html>
   .badge.status4, .badge.status5 {{ background: #fee2e2; color: #991b1b; }}
   code {{ font-size: 0.85em; }}
   footer {{ margin-top: 2rem; color: #999; font-size: 0.8rem; }}
+  h2 {{ margin-top: 2rem; font-size: 1.1rem; border-top: 1px solid #eee; padding-top: 1.5rem; }}
+  table.kv {{ width: auto; min-width: 320px; }}
+  table.kv th {{ position: static; background: none; cursor: default; width: 110px; }}
+  .unavailable {{ color: #888; font-style: italic; }}
+  ul.external-list {{ margin: 0.5rem 0; padding-left: 1.2rem; }}
+  ul.external-list li {{ margin-bottom: 0.25rem; }}
 </style>
 </head>
 <body>
@@ -65,7 +71,7 @@ _TEMPLATE = """<!DOCTYPE html>
       {rows}
     </tbody>
   </table>
-
+{email_section}{dns_section}{external_section}
   <footer>Generated locally &middot; no data leaves your machine from this file.</footer>
 
 <script>
@@ -115,9 +121,81 @@ def _status_badge(status_code):
     return f'<span class="badge {cls}">{status_code}</span>'
 
 
+def _render_email_section(email_security) -> str:
+    """Renders the SPF/DMARC/MX section — only if --email was actually
+    used for this scan. Returns an empty string otherwise, so the report
+    doesn't show a misleading empty section for data that was never
+    requested."""
+    if not email_security:
+        return ""
+    if not email_security.get("available"):
+        reason = html.escape(email_security.get("reason", "not available"))
+        return f'\n  <h2>Email security</h2>\n  <p class="unavailable">Not checked: {reason}</p>\n'
+
+    spf = email_security.get("spf")
+    dmarc = email_security.get("dmarc")
+    mx = email_security.get("mx") or []
+    spf_display = html.escape(spf) if spf else '<span class="badge dead">not found</span>'
+    dmarc_display = html.escape(dmarc) if dmarc else '<span class="badge dead">not found</span>'
+    mx_display = html.escape(", ".join(mx)) if mx else "&mdash;"
+
+    return (
+        "\n  <h2>Email security</h2>\n"
+        '  <table class="kv">\n'
+        f"    <tr><th>SPF</th><td>{spf_display}</td></tr>\n"
+        f"    <tr><th>DMARC</th><td>{dmarc_display}</td></tr>\n"
+        f"    <tr><th>MX records</th><td>{mx_display}</td></tr>\n"
+        "  </table>\n"
+    )
+
+
+def _render_dns_section(dns_records) -> str:
+    """Renders the NS/MX/TXT section — only if --dns-records was actually
+    used for this scan."""
+    if not dns_records:
+        return ""
+    if not dns_records.get("available"):
+        return (
+            "\n  <h2>DNS records</h2>\n"
+            '  <p class="unavailable">Not available (requires dnspython).</p>\n'
+        )
+
+    def fmt_list(values):
+        return "<br>".join(html.escape(v) for v in values) if values else "&mdash;"
+
+    ns_display = fmt_list(dns_records.get("NS") or [])
+    mx_display = fmt_list(dns_records.get("MX") or [])
+    txt_display = fmt_list(dns_records.get("TXT") or [])
+
+    return (
+        "\n  <h2>DNS records</h2>\n"
+        '  <table class="kv">\n'
+        f"    <tr><th>NS</th><td>{ns_display}</td></tr>\n"
+        f"    <tr><th>MX</th><td>{mx_display}</td></tr>\n"
+        f"    <tr><th>TXT</th><td>{txt_display}</td></tr>\n"
+        "  </table>\n"
+    )
+
+
+def _render_external_section(external_links) -> str:
+    """Renders the list of out-of-scope hosts found while crawling (see
+    split_by_scope() in cli.py) — only shown when the list is non-empty,
+    since most scans won't have any."""
+    if not external_links:
+        return ""
+    items = "".join(f"    <li><code>{html.escape(h)}</code></li>\n" for h in sorted(external_links))
+    return (
+        "\n  <h2>External links found (not scanned — different organization)</h2>\n"
+        f'  <ul class="external-list">\n{items}  </ul>\n'
+    )
+
+
 def render_html_report(result: dict, version: str = "1.0.0", app_name: str = "ReconCave") -> str:
     """Build the full HTML document as a string from a scan result dict
-    (the same structure written to the JSON output)."""
+    (the same structure written to the JSON output). Every optional
+    section (email security, DNS records, external links) only renders
+    when that data is actually present in the result — a scan that never
+    requested --email won't show an empty "Email security" section."""
     subdomains = result.get("subdomains", [])
     new_hosts = set(result.get("diff", {}).get("new", []))
 
@@ -152,6 +230,10 @@ def render_html_report(result: dict, version: str = "1.0.0", app_name: str = "Re
             new_badge=new_badge,
         ))
 
+    email_section = _render_email_section(result.get("email_security"))
+    dns_section = _render_dns_section(result.get("dns_records"))
+    external_section = _render_external_section(result.get("crawl", {}).get("external_links_found"))
+
     return _TEMPLATE.format(
         app_name=html.escape(app_name),
         target=html.escape(result.get("target", "")),
@@ -162,4 +244,7 @@ def render_html_report(result: dict, version: str = "1.0.0", app_name: str = "Re
         new_count=len(new_hosts),
         risk_count=risk_count,
         rows="\n      ".join(rows_html) if rows_html else "<tr><td colspan=6>No subdomains found.</td></tr>",
+        email_section=email_section,
+        dns_section=dns_section,
+        external_section=external_section,
     )

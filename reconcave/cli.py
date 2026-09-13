@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -458,6 +459,92 @@ def make_unique_path(base: str, ext: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# Update checking (menu-only convenience — the flag-driven CLI never
+# touches this, so scripted/automated usage is never affected by it)
+# --------------------------------------------------------------------------
+
+def _run_git(args: list, cwd: Path, timeout: float = 20.0):
+    return subprocess.run(
+        ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout
+    )
+
+
+def check_for_updates(project_root: Path = None) -> dict:
+    """Checks whether the local git checkout is behind its remote.
+    Never raises — every failure mode (not a git checkout, git not
+    installed, no configured remote, no network) is reported back as a
+    normal 'unavailable' result with a human-readable reason, since this
+    is a convenience check that should degrade gracefully, never break
+    the menu."""
+    project_root = project_root or _PROJECT_ROOT
+
+    if not (project_root / ".git").exists():
+        return {"available": False, "reason": "not a git checkout (installed from a package, not `git clone`)"}
+
+    try:
+        subprocess.run(["git", "--version"], capture_output=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {"available": False, "reason": "git is not installed"}
+
+    try:
+        fetch = _run_git(["fetch", "--quiet"], cwd=project_root)
+        if fetch.returncode != 0:
+            return {"available": False, "reason": f"git fetch failed: {fetch.stderr.strip()[:200]}"}
+
+        local = _run_git(["rev-parse", "HEAD"], cwd=project_root)
+        remote = _run_git(["rev-parse", "@{u}"], cwd=project_root)
+        if local.returncode != 0 or remote.returncode != 0:
+            return {"available": False, "reason": "no upstream branch configured for this checkout"}
+
+        local_hash = local.stdout.strip()
+        remote_hash = remote.stdout.strip()
+        if local_hash == remote_hash:
+            return {"available": True, "up_to_date": True}
+
+        count = _run_git(["rev-list", "--count", f"{local_hash}..{remote_hash}"], cwd=project_root)
+        behind_by = int(count.stdout.strip()) if count.returncode == 0 and count.stdout.strip().isdigit() else None
+
+        log_out = _run_git(["log", "--oneline", f"{local_hash}..{remote_hash}"], cwd=project_root)
+        commits = log_out.stdout.strip().split("\n") if log_out.stdout.strip() else []
+
+        return {
+            "available": True,
+            "up_to_date": False,
+            "behind_by": behind_by,
+            "commits": commits[:10],  # cap the preview even if the gap is huge
+        }
+    except subprocess.TimeoutExpired:
+        return {"available": False, "reason": "timed out (network issue?)"}
+    except Exception as e:
+        return {"available": False, "reason": str(e)}
+
+
+def apply_update(project_root: Path = None) -> bool:
+    """Runs `git pull` then reinstalls (`pip install -e .[full]`) in the
+    project root. Only ever called after explicit user confirmation in
+    the interactive menu — never triggered automatically. Returns True
+    only if both steps succeed."""
+    project_root = project_root or _PROJECT_ROOT
+
+    pull = _run_git(["pull"], cwd=project_root, timeout=60)
+    if pull.stdout.strip():
+        print(pull.stdout.strip())
+    if pull.returncode != 0:
+        log.error("git pull failed: %s", pull.stderr.strip())
+        return False
+
+    try:
+        install = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-e", f"{project_root}[full]"],
+            timeout=180,
+        )
+        return install.returncode == 0
+    except Exception as e:
+        log.error("Reinstall failed: %s", e)
+        return False
+
+
+# --------------------------------------------------------------------------
 # Core run
 # --------------------------------------------------------------------------
 
@@ -662,9 +749,56 @@ def _print_menu():
     print(f"  {c('6', 'green')}) {c('Everything', 'bold')}              — full crawl + recon + all enrichments")
     print(f"  {c('7', 'green')}) {c('Custom', 'bold')}                  — enter your own reconcave flags")
     print(f"  {c('8', 'green')}) {c('Help', 'bold')}                    — show all available flags and what they do")
-    print(f"  {c('9', 'green')}) {c('Exit', 'bold')}")
+    print(f"  {c('9', 'green')}) {c('Check for updates', 'bold')}       — see if a newer version is available on GitHub")
+    print(f"  {c('10', 'green')}) {c('Exit', 'bold')}")
     print()
     print(c("  Press Ctrl+C at any time to stop a running scan and return here.", "dim"))
+    print()
+
+
+def _handle_update_check():
+    print()
+    print(c("Checking for updates...", "dim"))
+    result = check_for_updates()
+
+    if not result["available"]:
+        print(c(f"Could not check for updates: {result['reason']}", "yellow"))
+        print(c("You can always update manually: git pull && pip install -e \".[full]\"", "dim"))
+        print()
+        return
+
+    if result["up_to_date"]:
+        print(c("You're already on the latest version.", "green", "bold"))
+        print()
+        return
+
+    behind = result.get("behind_by")
+    count_str = f"{behind} new commit(s)" if behind is not None else "new commits"
+    print(c(f"Update available — {count_str}:", "yellow", "bold"))
+    for commit in result.get("commits", []):
+        print(f"  {commit}")
+    print()
+
+    try:
+        answer = input("Install this update now? [y/N]: ").strip().lower()
+    except KeyboardInterrupt:
+        print()
+        answer = "n"
+
+    if answer != "y":
+        print("Skipped.")
+        print()
+        return
+
+    print(c("Pulling and reinstalling...", "dim"))
+    if apply_update():
+        print(c("Updated successfully. Restart reconcave to use the new version.", "green", "bold"))
+    else:
+        print(c(
+            "Update failed — see the error above. You can also update manually: "
+            'git pull && pip install -e ".[full]"',
+            "red",
+        ))
     print()
 
 
@@ -681,15 +815,20 @@ def interactive_menu():
 
     while True:
         try:
-            choice = input(c("Choose an option [1-9]: ", "cyan")).strip()
+            choice = input(c("Choose an option [1-10]: ", "cyan")).strip()
         except KeyboardInterrupt:
             print()
             log.info("Exiting.")
             return
 
-        if choice == "9" or choice.lower() in ("e", "exit", "q", "quit"):
+        if choice == "10" or choice.lower() in ("e", "exit", "q", "quit"):
             log.info("Exiting.")
             return
+
+        if choice == "9" or choice.lower() in ("update", "updates"):
+            _handle_update_check()
+            _print_menu()
+            continue
 
         if choice == "8" or choice.lower() in ("help", "h", "?"):
             print()
@@ -699,7 +838,7 @@ def interactive_menu():
             continue
 
         if choice not in _PRESETS and choice != "7":
-            print(c("Please enter a number from 1 to 9.", "red"))
+            print(c("Please enter a number from 1 to 10.", "red"))
             continue
 
         try:
