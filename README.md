@@ -113,6 +113,10 @@ changed — it's only strictly necessary when one has (check
 [CHANGELOG.md](CHANGELOG.md) if curious), but there's no harm in always
 including it.
 
+## Screenshots
+
+![ReconCave interactive menu](docs/menu-screenshot.png)
+
 ## Getting started
 
 ReconCave has two interfaces to the same code. Use whichever fits.

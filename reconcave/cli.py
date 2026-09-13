@@ -464,8 +464,14 @@ def make_unique_path(base: str, ext: str) -> str:
 # --------------------------------------------------------------------------
 
 def _run_git(args: list, cwd: Path, timeout: float = 20.0):
+    # GIT_TERMINAL_PROMPT=0 stops git from silently waiting for
+    # interactive username/password input if a remote ever needs auth —
+    # without this, a credential prompt with no attached terminal would
+    # just hang until the timeout instead of failing immediately with a
+    # clear error. Doesn't affect public repos, which never prompt.
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     return subprocess.run(
-        ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout
+        ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
     )
 
 
@@ -487,7 +493,7 @@ def check_for_updates(project_root: Path = None) -> dict:
         return {"available": False, "reason": "git is not installed"}
 
     try:
-        fetch = _run_git(["fetch", "--quiet"], cwd=project_root)
+        fetch = _run_git(["fetch", "--quiet"], cwd=project_root, timeout=30)
         if fetch.returncode != 0:
             return {"available": False, "reason": f"git fetch failed: {fetch.stderr.strip()[:200]}"}
 
@@ -750,7 +756,7 @@ def _print_menu():
     print(f"  {c('7', 'green')}) {c('Custom', 'bold')}                  — enter your own reconcave flags")
     print(f"  {c('8', 'green')}) {c('Help', 'bold')}                    — show all available flags and what they do")
     print(f"  {c('9', 'green')}) {c('Check for updates', 'bold')}       — see if a newer version is available on GitHub")
-    print(f"  {c('10', 'green')}) {c('Exit', 'bold')}")
+    print(f"  {c('0', 'green')}) {c('Exit', 'bold')}")
     print()
     print(c("  Press Ctrl+C at any time to stop a running scan and return here.", "dim"))
     print()
@@ -815,13 +821,13 @@ def interactive_menu():
 
     while True:
         try:
-            choice = input(c("Choose an option [1-10]: ", "cyan")).strip()
+            choice = input(c("Choose an option [0-9]: ", "cyan")).strip()
         except KeyboardInterrupt:
             print()
             log.info("Exiting.")
             return
 
-        if choice == "10" or choice.lower() in ("e", "exit", "q", "quit"):
+        if choice == "0" or choice.lower() in ("e", "exit", "q", "quit"):
             log.info("Exiting.")
             return
 
@@ -838,7 +844,7 @@ def interactive_menu():
             continue
 
         if choice not in _PRESETS and choice != "7":
-            print(c("Please enter a number from 1 to 10.", "red"))
+            print(c("Please enter a number from 0 to 9.", "red"))
             continue
 
         try:
